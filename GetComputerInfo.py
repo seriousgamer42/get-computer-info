@@ -29,9 +29,9 @@ class SystemInfoGUI:
         
         self.system_info = {}
 
-    def run_wmic_command(self, command):
+    def run_powershell_command(self, command):
         try:
-            result = subprocess.check_output(command, shell=True).decode()
+            result = subprocess.check_output(["powershell", "-Command", command], shell=True).decode()
             return result.strip()
         except:
             return "Information not available"
@@ -45,25 +45,20 @@ class SystemInfoGUI:
             return "N/A"
 
     def format_storage_info(self, storage_info):
-        # Split the storage info into lines
         lines = storage_info.split('\n')
         if len(lines) < 2:
             return "Storage information not available"
 
-        # Get headers and remove empty strings
-        headers = [h.strip() for h in lines[0].split()]
-        
         formatted_output = "Drive | Free Size | Total Space\n"
         formatted_output += "-" * 40 + "\n"
 
-        # Process each drive's information
-        for line in lines[1:]:
+        for line in lines:
             parts = line.split()
             if len(parts) >= 3:
                 drive = parts[0]
-                size = self.bytes_to_gb(parts[1])
-                free = self.bytes_to_gb(parts[2])
-                formatted_output += f"{drive} | {size} | {free}\n"
+                free = self.bytes_to_gb(parts[1])
+                size = self.bytes_to_gb(parts[2])
+                formatted_output += f"{drive} | {free} | {size}\n"
 
         return formatted_output
 
@@ -73,53 +68,45 @@ class SystemInfoGUI:
         
         # Operating System
         self.text_area.insert(tk.END, "Operating System:\n")
-        os_info = self.run_wmic_command('systeminfo | findstr /C:"OS Name" /C:"OS Version"')
+        os_info = platform.system() + " " + platform.version()
         self.text_area.insert(tk.END, f"{os_info}\n\n")
         self.system_info['Operating System'] = os_info
 
         # Motherboard
         self.text_area.insert(tk.END, "Motherboard:\n")
-        mobo_info = self.run_wmic_command('wmic baseboard get product,Manufacturer,version,serialnumber')
+        mobo_info = self.run_powershell_command('Get-WmiObject Win32_BaseBoard | Format-List -Property Manufacturer,Product,SerialNumber')
         self.text_area.insert(tk.END, f"{mobo_info}\n\n")
         self.system_info['Motherboard'] = mobo_info
 
         # CPU
         self.text_area.insert(tk.END, "CPU:\n")
-        cpu_info = self.run_wmic_command('wmic cpu get name')
+        cpu_info = self.run_powershell_command('Get-WmiObject Win32_Processor | Select-Object -ExpandProperty Name')
         self.text_area.insert(tk.END, f"{cpu_info}\n\n")
         self.system_info['CPU'] = cpu_info
 
         # RAM
         self.text_area.insert(tk.END, "RAM:\n")
-        ram_info = self.run_wmic_command('wmic memorychip get capacity')
-        # Convert RAM to GB
-        total_ram = 0
-        for line in ram_info.split('\n')[1:]:
-            if line.strip():
-                try:
-                    total_ram += int(line.strip())
-                except:
-                    continue
-        ram_gb = f"Total RAM: {total_ram / (1024**3):.2f} GB"
+        ram_info = self.run_powershell_command('Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum | Select-Object -ExpandProperty Sum')
+        ram_gb = f"Total RAM: {int(ram_info) / (1024**3):.2f} GB" if ram_info.isdigit() else "N/A"
         self.text_area.insert(tk.END, f"{ram_gb}\n\n")
         self.system_info['RAM'] = ram_gb
 
         # Storage
         self.text_area.insert(tk.END, "Storage:\n")
-        storage_raw = self.run_wmic_command('wmic logicaldisk get caption,size,freespace')
+        storage_raw = self.run_powershell_command('Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID,FreeSpace,Size | Format-Table -HideTableHeaders')
         storage_formatted = self.format_storage_info(storage_raw)
         self.text_area.insert(tk.END, f"{storage_formatted}\n\n")
         self.system_info['Storage'] = storage_formatted
 
         # GPU
         self.text_area.insert(tk.END, "GPU:\n")
-        gpu_info = self.run_wmic_command('wmic path win32_VideoController get caption')
+        gpu_info = self.run_powershell_command('Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name')
         self.text_area.insert(tk.END, f"{gpu_info}\n\n")
         self.system_info['GPU'] = gpu_info
 
         # Network Interfaces
         self.text_area.insert(tk.END, "Network Interfaces:\n")
-        network_info = self.run_wmic_command('wmic nic get name')
+        network_info = self.run_powershell_command('Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.NetConnectionStatus -eq 2 } | Select-Object -ExpandProperty Name')
         self.text_area.insert(tk.END, f"{network_info}\n")
         self.system_info['Network Interfaces'] = network_info
 
